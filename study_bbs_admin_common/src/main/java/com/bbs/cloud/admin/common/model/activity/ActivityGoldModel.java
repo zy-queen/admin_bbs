@@ -1,7 +1,7 @@
 package com.bbs.cloud.admin.common.model.activity;
 
 /**
- * 这些model主要起一个参考作用
+ * 这些model主要起一个参考作用，用到的时候会过来复制
  * 活动金币
  */
 public class ActivityGoldModel {

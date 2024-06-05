@@ -5,13 +5,12 @@ import com.bbs.cloud.admin.common.feigh.client.TestFeighClient;
 import com.bbs.cloud.admin.common.result.HttpResult;
 import com.bbs.cloud.admin.common.util.JedisUtil;
 import com.bbs.cloud.admin.common.util.RedisOperator;
-import com.bbs.cloud.admin.config.RabbitConfig;
 import com.bbs.cloud.admin.service.TestService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Controller;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -41,6 +40,7 @@ public class TestController {
     private RabbitTemplate rabbitTemplate;//用于生产消息
 
     @Autowired
+    @Qualifier("testFeighClientFallback")//一个远程实现、一个common的TestFeighClientFallback对接口TestClient的实现
     private TestFeighClient testFeighClient;
 
     @GetMapping("/hello")

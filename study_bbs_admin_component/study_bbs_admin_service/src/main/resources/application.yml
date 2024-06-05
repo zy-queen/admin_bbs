@@ -1,0 +1,76 @@
+server:
+  port: 8091 #服务组件的端口号
+spring:
+  application:
+    name: service #服务组件的名字
+
+  datasource: # 数据库
+    type: com.zaxxer.hikari.HikariDataSource # 数据源类型 HikariCP
+    driver-class-name: com.mysql.cj.jdbc.Driver # mysql驱动
+    url: jdbc:mysql://localhost:3306/bbs_cloud?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&serverTimezone=Asia/Shanghai&allowMultiQueries=true
+    username: root
+    password: 123456
+
+  hikari:
+    connection-timeout: 30000 # 等待连接池分配连接的最⼤时⻓（毫秒），超过这个时⻓还没可⽤的连接则发⽣SQLException， 默认:30秒
+    minimum-idle: 5 # 最⼩连接数
+    maximum-pool-size: 20 # 最⼤连接数
+    auto-commit: true # ⾃动提交.
+    idle-timeout: 600000 # 连接超时的最⼤时⻓（毫秒），超时则被释放（retired），默认:10分钟
+    pool-name: DateSourceHikariCP # 连接池名字
+    max-lifetime: 1800000 # 连接的⽣命时⻓（毫秒），超时⽽且没被使⽤则被释放（retired），默认:30分钟 1800000ms
+    connection-test-query: SELECT 1
+  #redis的相关配置：需启动redis-server
+  redis:
+    database: 0
+    host: 127.0.0.1
+    port: 6379
+    password: 123456
+    jedis:
+      pool:
+        max-active: 8
+        max-wait: -1
+        max-idle: 8
+        min-idle: 4
+      connect-timeout: 1000
+  #消息中间件的配置：需启动服务，本地访问：http://127.0.0.1:15672
+  #交换机、队列、路由、生产者、消费者
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    virtual-host: /
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml # mapper路径
+
+eureka:
+  instance:
+    prefer-ip-address: true
+    hostname: localhost
+  client:
+    service-url:
+      defaultZone: http://localhost:20000/eureka/ #配置服务注册中心
+      register-with-eureka: true # 是否发起服务注册
+
+
+
+#用于远程调用：解决 feign 延时、抛出异常等问题
+feign:
+  hystrix:
+    enabled: true
+  client:
+    config:
+      default:
+        connectTimeout: 50000 # 连接超时时间
+        readTimeout: 50000
+hystrix:
+  command:
+    default:
+      execution:
+        timeout:
+          enabled: true
+  isolation:
+    thread:
+      timeoutInMilliseconds: 10000
