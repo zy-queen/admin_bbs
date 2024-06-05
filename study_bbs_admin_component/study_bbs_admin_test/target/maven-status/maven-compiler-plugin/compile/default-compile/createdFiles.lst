@@ -1,0 +1,4 @@
+com\bbs\cloud\admin\Application.class
+com\bbs\cloud\admin\controller\TestController.class
+com\bbs\cloud\admin\service\TestService.class
+com\bbs\cloud\admin\mapper\TestMapper.class
