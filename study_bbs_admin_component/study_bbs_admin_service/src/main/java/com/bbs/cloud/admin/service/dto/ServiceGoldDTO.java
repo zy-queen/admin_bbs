@@ -2,6 +2,7 @@ package com.bbs.cloud.admin.service.dto;
 
 /**
  * 系统金钱管理
+ * 去common模块下的model查看定义的参照标准
  */
 public class ServiceGoldDTO {
 

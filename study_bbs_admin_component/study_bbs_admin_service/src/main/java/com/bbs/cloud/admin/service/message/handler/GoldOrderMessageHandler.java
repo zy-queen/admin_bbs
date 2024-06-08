@@ -26,7 +26,7 @@ public class GoldOrderMessageHandler implements MessageHandler {
     @Autowired
     private ServiceGoldMapper serviceGoldMapper;
     /**
-     * 对于金币订单的处理
+     * 对于金币订单的处理：操作的table是service_gold
      */
     @Override
     public void handler(OrderMessageDTO orderMessageDTO) {
@@ -36,8 +36,11 @@ public class GoldOrderMessageHandler implements MessageHandler {
             ServiceGoldDTO serviceGoldDTO = serviceGoldMapper.queryServiceGoldDTO(ServiceContant.SERVICE_GOLD_NAME);
             //金币如果为空，说明这个租户没有充值过，这里需要充值
             if(serviceGoldDTO == null){
-                serviceGoldDTO.setId(CommonUtil.createUUID());
-                serviceGoldDTO.setName(ServiceContant.SERVICE_GOLD_NAME);//金币就这一个默认的名字
+                serviceGoldDTO = new ServiceGoldDTO();
+                String id = CommonUtil.createUUID();
+                serviceGoldDTO.setId(id);
+                String name = ServiceContant.SERVICE_GOLD_NAME;
+                serviceGoldDTO.setName(name);//金币就这一个默认的名字
                 serviceGoldDTO.setGold(ServiceContant.DEFAULT_SERVICE_GOLD);//默认的金币额度：10000
                 serviceGoldDTO.setUnusedGold(ServiceContant.DEFAULT_SERVICE_UNUSED_GOLD);
                 serviceGoldDTO.setUsedGold(ServiceContant.DEFAULT_SERVICE_USED_GOLD);

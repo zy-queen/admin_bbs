@@ -31,13 +31,13 @@ public class GiftOrderMessageHandler implements MessageHandler {
     private ServiceGiftMapper serviceGiftMapper;
 
     /**
-     * 对于礼物订单的处理
+     * 对于礼物订单的处理：操作的table是service_gift
      */
     @Override
     public void handler(OrderMessageDTO orderMessageDTO) {
         logger.info("开始处理礼物服务订单：{}", JsonUtils.objectToJson(orderMessageDTO));
         try{
-            Map<Integer, GiftEnum> giftsMap = GiftEnum.getGiftsMap();
+            Map<Integer, GiftEnum> giftsMap = GiftEnum.getGiftsMap();//礼物订单的礼物类型
             for(GiftEnum giftEnum : giftsMap.values()){//遍历礼物枚举类
                 Integer giftType = giftEnum.getGiftType();//得到礼物类型
                 //根据礼物类型查看礼物在数据库中是否存在

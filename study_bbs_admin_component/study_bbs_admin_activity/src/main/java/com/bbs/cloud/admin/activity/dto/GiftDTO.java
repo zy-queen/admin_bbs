@@ -1,14 +1,14 @@
-package com.bbs.cloud.admin.service.dto;
-
+package com.bbs.cloud.admin.activity.dto;
 
 import com.bbs.cloud.admin.common.enums.gift.GiftEnum;
 
 /**
- * 礼物
- * 去common模块下的model查看定义的参照标准
+ * ProjectName: com.bbs.cloud.admin.service.result
+ *
+ * @author: 10270
+ * description:
  */
-public class ServiceGiftDTO {
-
+public class GiftDTO {
     private String id;
 
     /**

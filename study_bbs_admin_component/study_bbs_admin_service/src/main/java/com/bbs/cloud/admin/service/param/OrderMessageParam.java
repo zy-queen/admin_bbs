@@ -4,7 +4,8 @@ package com.bbs.cloud.admin.service.param;
  * ProjectName: com.bbs.cloud.admin.service.param
  *
  * @author: 10270
- * description:
+ * description:接收创建活动的请求参数体
+ * param用处：接收请求参数、通过mq发送/接收消息，监听消息就在message那定义
  */
 
 import java.util.Date;
@@ -15,6 +16,7 @@ import java.util.Date;
  */
 public class OrderMessageParam {
     /**
+     * 请求参数：
      *  "id": "test_f74bb2da808f",
      *  "serviceType": 31,
      *  "serviceName": "SERVICE_MONEY_NAME"
