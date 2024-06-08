@@ -11,6 +11,7 @@ import com.bbs.cloud.admin.activity.param.CreateActivityParam;
 import com.bbs.cloud.admin.activity.param.OperatorActivityParam;
 import com.bbs.cloud.admin.activity.service.ActivityManage;
 import com.bbs.cloud.admin.activity.service.ActivityService;
+import com.bbs.cloud.admin.common.contant.RedisContant;
 import com.bbs.cloud.admin.common.enums.activity.ActivityStatusEnum;
 import com.bbs.cloud.admin.common.enums.activity.ActivityTypeEnum;
 import com.bbs.cloud.admin.common.enums.activity.LuckyBagStatusEnum;
@@ -20,6 +21,7 @@ import com.bbs.cloud.admin.common.feigh.client.ServiceFeighClient;
 import com.bbs.cloud.admin.common.result.HttpResult;
 import com.bbs.cloud.admin.common.util.CommonUtil;
 import com.bbs.cloud.admin.common.util.JsonUtils;
+import com.bbs.cloud.admin.common.util.RedisLockHelper;
 import org.apache.catalina.startup.RealmRuleSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +51,9 @@ public class LuckyBagActivityManage implements ActivityManage {
 
     @Autowired
     private LuckyBagMapper luckyBagMapper;
+    //分布式锁
+    @Autowired
+    private RedisLockHelper redisLockHelper;//组件
 
     /**
      * 创建福袋活动流程：1、福袋的数量（空？<1？）；2、远程调用服务组件接口：查看现存礼物总量；3、创建福袋活动
@@ -74,70 +79,70 @@ public class LuckyBagActivityManage implements ActivityManage {
             logger.info("开始创建福袋活动，福袋数量小于最小值1，请求参数:{}", JsonUtils.objectToJson(param));
             return HttpResult.generateHttpResult(ActivityException.LUCKY_BAG_ACTIVITY_AMOUNT_LESS_THAN_ONE);
         }
-        /**
-         * 光有福袋活动不行，还需要同时创建有多少个福袋，福袋数量是否满足该福袋活动的需求————通过mq与服务组件交互，实现解耦
-         * ————》服务组件需要提供对外的接口，给活动组件查询目前有多少个福袋数量
-         */
-        /**
-         * 远程调用ServiceFeighClient提供的接口
-         * 服务组件：提供查询礼物的未使用的数量，在这里活动组件调用
-         * 需判断：1、未使用的另外iu数量是否为空；是否获取成功；2、比较未使用的礼物数量与创建当前活动所需数量的大小
-         */
-        //这里如果发生异常，feign会有一些解决方法的
-        HttpResult<Integer> result = serviceFeighClient.queryServiceGiftTotal();
-        if(result == null || !CommonExceptionEnum.SUCCESS.getCode().equals(result.getCode()) || result.getData() == null){
-            logger.info("开始创建福袋活动，远程调用，获取服务组件礼物总数量失败，请求参数:{}, result:{}", JsonUtils.objectToJson(param), JsonUtils.objectToJson(result));
-            //获取礼物总数量失败
-            return HttpResult.generateHttpResult(ActivityException.LUCKY_BAG_ACTIVITY_SERVICE_GIFT_AMOUNT_FAIL);
-        }
-        Integer total = result.getData();//通过远程调用服务组件的接口，得到礼物的总数量
-        //判断未使用的礼物数量与创建当前活动所需的礼物数量的大小关系
-        if(total < amount){//未使用的小于所需的，还是不能创建活动成功
-            logger.info("开始创建福袋活动，远程调用，获取服务组件礼物总数量不足，请求参数:{}, result:{}", JsonUtils.objectToJson(param), JsonUtils.objectToJson(result));
-            return HttpResult.generateHttpResult(ActivityException.LUCKY_BAG_ACTIVITY_SERVICE_GIFT_AMOUNT_NOT_MEET);
-        }
 
+        //创建这个key的前提是如果key不存在会设置key值，如果已存在就啥也不做——也就说明key不为
+        String key = RedisContant.BBS_CLOUD_LOCK_GIFT_KEY;//本系统默认只有一个租户，如果是多个租户还需要加上租户id
         try {
-            /**
-             * 该验证都验证完了，开始创建活动（这里具体到红包活动）
-             * 字段：id、name、content、status、activityType、amount、quota（福袋活动不需要）、
-             * imgLink、createDate、updateDate、startDate(可为空)、endDate（可为空）
-             */
-            //第一步：创建活动
-            logger.info("开始创建福袋活动----开始创建活动，请求参数:{}", JsonUtils.objectToJson(param));
-            ActivityDTO activityDTO = new ActivityDTO();
-            activityDTO.setId(CommonUtil.createUUID());
-            activityDTO.setName(param.getName());
-            activityDTO.setContent(param.getContent());
-            activityDTO.setStatus(ActivityStatusEnum.INITIAL.getStatus());//刚开始是一个初始化的状态
-            activityDTO.setActivityType(param.getActivityType());
-            activityDTO.setAmount(amount);
-            activityDTO.setCreateDate(new Date());
-            activityDTO.setUpdateDate(new Date());
-            activityMapper.insertActivityDTO(activityDTO);//将创建的福袋活动保存到数据库表activity中
+            //锁只有一把
+            //被加上时间戳、不允许重试，因此如果已经有了其他请求到这是不能执行的，只有等待——理解为锁住了
+            if(redisLockHelper.lock(key, CommonUtil.createUUID(), 60000L)){//给key加锁，从获取礼物列表开始锁
+                /**
+                 * 远程调用服务组件（ServiceFeighClient提供的接口）查询礼物数量，判断礼物数量是否足够创建福袋活动的
+                 * 需判断：1、未使用的另外iu数量是否为空；是否获取成功；2、比较未使用的礼物数量与创建当前活动所需数量的大小
+                 */
+                //这里如果发生异常，feign会有一些解决方法的
+                HttpResult<Integer> result = serviceFeighClient.queryServiceGiftTotal();
+                if(result == null || !CommonExceptionEnum.SUCCESS.getCode().equals(result.getCode()) || result.getData() == null){
+                    logger.info("开始创建福袋活动，远程调用，获取服务组件礼物总数量失败，请求参数:{}, result:{}", JsonUtils.objectToJson(param), JsonUtils.objectToJson(result));
+                    //获取礼物总数量失败
+                    return HttpResult.generateHttpResult(ActivityException.LUCKY_BAG_ACTIVITY_SERVICE_GIFT_AMOUNT_FAIL);
+                }
+                Integer total = result.getData();//通过远程调用服务组件的接口，得到礼物的总数量
+                //判断未使用的礼物数量与创建当前活动所需的礼物数量的大小关系
+                if(total < amount){//未使用的小于所需的，还是不能创建活动成功
+                    logger.info("开始创建福袋活动，远程调用，获取服务组件礼物总数量不足，请求参数:{}, result:{}", JsonUtils.objectToJson(param), JsonUtils.objectToJson(result));
+                    return HttpResult.generateHttpResult(ActivityException.LUCKY_BAG_ACTIVITY_SERVICE_GIFT_AMOUNT_NOT_MEET);
+                }
+                //第一步：创建活动
+                logger.info("开始创建福袋活动----开始创建活动，请求参数:{}", JsonUtils.objectToJson(param));
+                ActivityDTO activityDTO = new ActivityDTO();
+                activityDTO.setId(CommonUtil.createUUID());
+                activityDTO.setName(param.getName());
+                activityDTO.setContent(param.getContent());
+                activityDTO.setStatus(ActivityStatusEnum.INITIAL.getStatus());//刚开始是一个初始化的状态
+                activityDTO.setActivityType(param.getActivityType());
+                activityDTO.setAmount(amount);
+                activityDTO.setCreateDate(new Date());
+                activityDTO.setUpdateDate(new Date());
+                activityMapper.insertActivityDTO(activityDTO);//将创建的福袋活动保存到数据库表activity中
 
-            /**
-             * 礼物数量都是够创建当前活动所用的，下面开始创建福袋
-             * 根据福袋的数量，来使用礼物创建福袋————当前活动要用
-             * 保存福袋之前，需要拉一下服务组件那边的礼物列表【远程调用】————福袋生成后对应的礼物数量需要减少
-             */
-            //第二步：包装福袋
-            List<GiftDTO> giftDTOList = packLuckyBag(amount, activityDTO.getId());//把礼物包装成福袋：随机生成一个数指定礼物为福袋
-            //第三步：远程调用更新服务组件的礼物列表
-            logger.info("开始创建福袋活动----更新服务组件礼物列表，请求参数:{}", JsonUtils.objectToJson(param));
-            HttpResult updateResult = serviceFeighClient.updateServiceGiftList(JsonUtils.objectToJson(giftDTOList));
-            if(updateResult == null || !CommonExceptionEnum.SUCCESS.getCode().equals(updateResult.getCode())){
-                logger.info("开始创建福袋活动----更新服务组件礼物列表异常，请求参数:{}", JsonUtils.objectToJson(param));
-                throw new HttpException(ActivityException.LUCKY_BAG_ACTIVITY_SERVICE_GIFT_LIST_UPDATE_FAIL);
+                /**
+                 * 礼物数量都是够创建当前活动所用的，下面开始创建福袋（随机指定礼物类别成为福袋）
+                 * 保存福袋之前，需要远程调用服务组件更新相应的礼物库存
+                 */
+                //第二步：包装福袋
+                List<GiftDTO> giftDTOList = packLuckyBag(amount, activityDTO.getId());//把礼物包装成福袋：随机生成一个数指定礼物为福袋
+                //第三步：远程调用更新服务组件的礼物列表
+                logger.info("开始创建福袋活动----更新服务组件礼物列表，请求参数:{}", JsonUtils.objectToJson(param));
+                HttpResult updateResult = serviceFeighClient.updateServiceGiftList(JsonUtils.objectToJson(giftDTOList));
+                if(updateResult == null || !CommonExceptionEnum.SUCCESS.getCode().equals(updateResult.getCode())){
+                    logger.info("开始创建福袋活动----更新服务组件礼物列表异常，请求参数:{}", JsonUtils.objectToJson(param));
+                    throw new HttpException(ActivityException.LUCKY_BAG_ACTIVITY_SERVICE_GIFT_LIST_UPDATE_FAIL);
+                }
+            }else{//没获取到锁————返回一个请勿重复操作
+                logger.info("开始创建福袋活动----更新服务组件礼物列表，请求参数:{}", JsonUtils.objectToJson(param));
+                return HttpResult.generateHttpResult(ActivityException.ACTIVITY_NOT_REPEAT_MANAGE);
             }
         }catch (HttpException e){//已知的运行时异常
-            logger.info("开始创建福袋活动，发生HttpException异常，请求参数:{}", JsonUtils.objectToJson(param));
+            logger.info("开始创建福袋活动，请勿重复操作，请求参数:{}", JsonUtils.objectToJson(param));
             e.printStackTrace();
             throw e;
         }catch (Exception e){//未知的运行时异常
             logger.info("开始创建福袋活动，发生Exception异常，请求参数:{}", JsonUtils.objectToJson(param));
             e.printStackTrace();
             throw e;
+        }finally {
+            redisLockHelper.releaseLock(key);//释放锁
         }
 
         return HttpResult.ok();
