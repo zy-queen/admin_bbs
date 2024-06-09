@@ -9,7 +9,8 @@ import org.springframework.web.bind.annotation.*;
  * ProjectName: com.bbs.cloud.admin.service.endpoint
  *
  * @author: 10270
- * description:给活动组件查询活动对应的数量：例如福袋活动——福袋数量、红包活动——红包数量、积分兑换福袋——、积分兑换金币——金币
+ * description: 远程调用服务组件接口, 通过调用活动组件feign客户端ServiceFeighClient实现
+ * 给活动组件查询活动对应的数量：例如福袋活动——福袋数量、红包活动——红包数量、积分兑换福袋——、积分兑换金币——金币
  * 对外的feign接口，远程过程调用————给活动组件调用的接口————活动组件调用对应的feignClient
  */
 @RestController

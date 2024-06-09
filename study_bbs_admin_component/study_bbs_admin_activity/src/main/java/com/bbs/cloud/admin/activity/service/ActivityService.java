@@ -1,12 +1,15 @@
 package com.bbs.cloud.admin.activity.service;
 
+import com.bbs.cloud.admin.activity.contant.ActivityContant;
 import com.bbs.cloud.admin.activity.dto.ActivityDTO;
 import com.bbs.cloud.admin.activity.exception.ActivityException;
 import com.bbs.cloud.admin.activity.mapper.ActivityMapper;
+import com.bbs.cloud.admin.activity.mapper.LuckyBagMapper;
 import com.bbs.cloud.admin.activity.param.CreateActivityParam;
 import com.bbs.cloud.admin.activity.param.OperatorActivityParam;
 import com.bbs.cloud.admin.common.enums.activity.ActivityStatusEnum;
 import com.bbs.cloud.admin.common.enums.activity.ActivityTypeEnum;
+import com.bbs.cloud.admin.common.enums.activity.LuckyBagStatusEnum;
 import com.bbs.cloud.admin.common.result.HttpResult;
 import com.bbs.cloud.admin.common.util.JsonUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -31,8 +34,16 @@ public class ActivityService {
     private List<ActivityManage> activityManages;//加载该接口activityManages的所有实现类
 
     @Autowired
-    private ActivityMapper activityMapper;
+    private ActivityMapper activityMapper;//操作activity活动表的mapper
 
+    @Autowired
+    private LuckyBagMapper luckyBagMapper;//操作lucky_bag福袋活动表的mapper
+
+    /**
+     * 创建活动
+     * @param param
+     * @return
+     */
     public HttpResult createActivity(CreateActivityParam param) {
         logger.info("开始创建活动，请求参数{}", JsonUtils.objectToJson(param));
         /**
@@ -53,6 +64,7 @@ public class ActivityService {
         }
 
         Integer activityType = param.getActivityType();
+        //判断活动类型是否符合要求
         if(ActivityTypeEnum.getActivityTypeEnumMap().getOrDefault(activityType,null) == null){
             logger.info("开始创建活动，活动类型不存在，请求参数{}", JsonUtils.objectToJson(param));
             return HttpResult.generateHttpResult(ActivityException.ACTIVITY_TYPE_IS_NOT_EXIST);//活动类型不存在
@@ -84,14 +96,100 @@ public class ActivityService {
                 .filter(item -> item.getActivityType().equals(activityType))
                 .findFirst().get()
                 .createActivity(param);
-
     }
-
+    /**
+     * 启动活动
+     * @param param
+     * @return
+     */
     public HttpResult startActivity(OperatorActivityParam param) {
-        return HttpResult.ok();
+        /**
+         * 处理通用字段，handler过滤器到具体类型的活动再做具体处理
+         */
+        logger.info("启动活动,请求参数:{}",JsonUtils.objectToJson(param));
+        //得到活动id：1、是否为空; 2、长度是否符合; 3、该活动是否创建（即活动表activity中是否存在）; 4、判断activity表中状态;
+        String id = param.getId();
+        if(StringUtils.isEmpty(id)){//判断活动id是否为空
+            logger.info("启动活动---活动id为空, 请求参数:{}",JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.ACTIVITY_ID_IS_NOT_NULL);
+
+        }
+        if(ActivityContant.ACTIVITY_ID_LENGTH != id.length()){//uuid生成的id长度为32位
+            logger.info("启动活动---活动id格式不正确, 请求参数:{}",JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.ACTIVITY_ID_FORMAT_NOT_TRUE);
+        }
+        ActivityDTO activityDTO = activityMapper.queryActivityById(id);//去活动表查询该活动是否存在
+        if(activityDTO == null){//activity表中不存在该id——即该活动不存在
+            logger.info("启动活动---活动不存在, 请求参数:{}",JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.ACTIVITY_IS_NOT_EXIST);
+        }
+        //活动启动前提：初始状态
+        if(!activityDTO.getStatus().equals(ActivityStatusEnum.INITIAL.getStatus())){//活动非初始化状态1
+            logger.info("启动活动---活动状态不正确, 请求参数:{}",JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.ACTIVITY_STATUS_NOT_TRUE);
+
+        }
+        Integer activityType = activityDTO.getActivityType();//activity表中关于该id的活动已经拿到——》得到活动类型
+        //符合上面几种要求后，handler过滤到具体的活动类型后做"开启活动"操作
+        return activityManages.stream()
+                .filter(item -> item.getActivityType().equals(activityType))
+                .findFirst().get()
+                .startActivity(activityDTO);
     }
 
+    /**
+     * 终止活动
+     * @param param
+     * @return
+     */
     public HttpResult endActivity(OperatorActivityParam param) {
-        return HttpResult.ok();
+        logger.info("终止活动,请求参数:{}",JsonUtils.objectToJson(param));
+        //得到活动id：1、是否为空; 2、长度是否符合; 3、该活动是否创建（即活动表activity中是否存在）; 4、判断activity表中状态;
+        String id = param.getId();
+        if(StringUtils.isEmpty(id)){//判断活动id是否为空
+            logger.info("终止活动---活动id为空, 请求参数:{}",JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.ACTIVITY_ID_IS_NOT_NULL);
+
+        }
+        if(ActivityContant.ACTIVITY_ID_LENGTH != id.length()){//uuid生成的id长度为32位
+            logger.info("终止活动---活动id格式不正确, 请求参数:{}",JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.ACTIVITY_ID_FORMAT_NOT_TRUE);
+        }
+        ActivityDTO activityDTO = activityMapper.queryActivityById(id);//去活动表查询该活动是否存在
+        if(activityDTO == null){//activity表中不存在该id——即该活动不存在
+            logger.info("终止活动---活动不存在, 请求参数:{}",JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.ACTIVITY_IS_NOT_EXIST);
+        }
+        //活动启动前提：活动正在进行中
+        if(!activityDTO.getStatus().equals(ActivityStatusEnum.RUNNING.getStatus())){//活动非进行中状态2
+            logger.info("终止活动---活动状态不正确, 请求参数:{}",JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.ACTIVITY_STATUS_NOT_TRUE);
+
+        }
+        Integer activityType = activityDTO.getActivityType();//activity表中关于该id的活动已经拿到——》得到活动类型
+        //符合上面几种要求后，handler过滤到具体的活动类型后做"终止活动"操作
+        return activityManages.stream()
+                .filter(item -> item.getActivityType().equals(activityType))
+                .findFirst().get()
+                .endActivity(activityDTO);
+    }
+    /**
+     * 根据礼物类别去福袋活动表lucky_bag中查询已使用的礼物总数（礼物状态: 正常待领取、正在使用中的）
+     * @return
+     */
+    public HttpResult<Integer> queryUsedGiftAmountByType(Integer giftType) {
+        logger.info("远程调用------start-----获取待领取和已经被领取的礼物数量, giftType: {}", giftType);
+
+        Integer amount = luckyBagMapper.queryGiftAmount(giftType,
+                Arrays.asList(
+                        LuckyBagStatusEnum.NORMAL.getStatus(),
+                        LuckyBagStatusEnum.GETED.getStatus()
+                )
+        );
+        if(amount == null){
+            amount = 0;//原始表没有数据会发生这种情况
+        }
+        logger.info("远程调用------end-----获取待领取和已经被领取的礼物数量, giftType: {}, amount: {}", giftType, amount);
+        return new HttpResult(amount);
     }
 }

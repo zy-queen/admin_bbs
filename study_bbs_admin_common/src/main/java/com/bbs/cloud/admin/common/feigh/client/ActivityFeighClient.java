@@ -1,7 +1,6 @@
 package com.bbs.cloud.admin.common.feigh.client;
 
 import com.bbs.cloud.admin.common.feigh.factory.ActivityFeighFactory;
-import com.bbs.cloud.admin.common.feigh.factory.ServiceFeighFactory;
 import com.bbs.cloud.admin.common.result.HttpResult;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;

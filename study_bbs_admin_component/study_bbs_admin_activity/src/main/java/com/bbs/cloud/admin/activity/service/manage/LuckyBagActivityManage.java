@@ -20,6 +20,7 @@ import com.bbs.cloud.admin.common.error.HttpException;
 import com.bbs.cloud.admin.common.feigh.client.ServiceFeighClient;
 import com.bbs.cloud.admin.common.result.HttpResult;
 import com.bbs.cloud.admin.common.util.CommonUtil;
+import com.bbs.cloud.admin.common.util.JedisUtil;
 import com.bbs.cloud.admin.common.util.JsonUtils;
 import com.bbs.cloud.admin.common.util.RedisLockHelper;
 import org.apache.catalina.startup.RealmRuleSet;
@@ -54,8 +55,11 @@ public class LuckyBagActivityManage implements ActivityManage {
     //分布式锁
     @Autowired
     private RedisLockHelper redisLockHelper;//组件
+    @Autowired
+    private JedisUtil jedisUtil;//redis缓存操作的工具
 
     /**
+     * 创建福袋活动
      * 创建福袋活动流程：1、福袋的数量（空？<1？）；2、远程调用服务组件接口：查看现存礼物总量；3、创建福袋活动
      * 4、包装福袋，批量插入包换好的福袋——》同时需要远程调用服务组件，更新包装福袋后（消耗的礼物）现存的礼物库存
      * 问题：
@@ -84,8 +88,8 @@ public class LuckyBagActivityManage implements ActivityManage {
         String key = RedisContant.BBS_CLOUD_LOCK_GIFT_KEY;//本系统默认只有一个租户，如果是多个租户还需要加上租户id
         try {
             //锁只有一把
-            //被加上时间戳、不允许重试，因此如果已经有了其他请求到这是不能执行的，只有等待——理解为锁住了
-            if(redisLockHelper.lock(key, CommonUtil.createUUID(), 60000L)){//给key加锁，从获取礼物列表开始锁
+            //被加上时间戳、不允许重试，因此如果已经有了其他请求到这是不能执行的，只有等待——理解为锁住了。测试时改成60000L
+            if(redisLockHelper.lock(key, CommonUtil.createUUID(), 3000L)){//给key加锁，从获取礼物列表开始锁
                 /**
                  * 远程调用服务组件（ServiceFeighClient提供的接口）查询礼物数量，判断礼物数量是否足够创建福袋活动的
                  * 需判断：1、未使用的另外iu数量是否为空；是否获取成功；2、比较未使用的礼物数量与创建当前活动所需数量的大小
@@ -140,7 +144,8 @@ public class LuckyBagActivityManage implements ActivityManage {
         }catch (Exception e){//未知的运行时异常
             logger.info("开始创建福袋活动，发生Exception异常，请求参数:{}", JsonUtils.objectToJson(param));
             e.printStackTrace();
-            throw e;
+            //throw e;
+            return HttpResult.fail();
         }finally {
             redisLockHelper.releaseLock(key);//释放锁
         }
@@ -167,7 +172,6 @@ public class LuckyBagActivityManage implements ActivityManage {
         List<GiftDTO> giftDTOS = JsonUtils.jsonToList(giftListJson, GiftDTO.class);
         Map<Integer, GiftDTO> giftDTOMap = new HashMap<>();
         giftDTOS.forEach(item -> giftDTOMap.put(item.getGiftType(), item));//礼物逐个添加至礼物map中
-
         List<LuckyBagDTO> luckyBagDTOList = new ArrayList<>();
         for(int i = 0; i < amount; i++){//开始包装福袋，根据传入的数量来，礼物类型有10种，是随机生成的
             LuckyBagDTO luckyBagDTO = new LuckyBagDTO();
@@ -175,7 +179,6 @@ public class LuckyBagActivityManage implements ActivityManage {
             luckyBagDTO.setActivityId(activityId);
             luckyBagDTO.setStatus(LuckyBagStatusEnum.NORMAL.getStatus());//福袋的状态
             luckyBagDTO.setGiftType(randomGiftType());//随机生成一个1-10之间
-
             luckyBagDTOList.add(luckyBagDTO);
             /**
              * 更新服务组件礼物的数量
@@ -203,14 +206,82 @@ public class LuckyBagActivityManage implements ActivityManage {
         return Integer.valueOf(randomNum);
     }
 
+    /**
+     * 启动福袋活动
+     * handler到这里直接对具体的福袋活动进行操作——启动活动:1、修改activity表中活动状态为进行中2；2、redis修改福袋活动表lucky_bag中状态
+     * @param activityDTO
+     * @return
+     */
     @Override
-    public HttpResult startActivity(OperatorActivityParam param) {
-        return null;
+    @Transactional(rollbackFor = {Exception.class})
+    public HttpResult startActivity(ActivityDTO activityDTO) {
+        logger.info("启动福袋活动, 请求参数param:{}", JsonUtils.objectToJson(activityDTO));
+        //生成redis分布式锁的key：防止多个请求重复开启
+        String key = RedisContant.BBS_CLOUD_LOCK_ACTIVITY + activityDTO.getId();//各个活动不一样，添加活动的id
+        try {
+            //添加分布式锁——获取分布式锁
+            if(redisLockHelper.lock(key, CommonUtil.createUUID(), 3000L)){//3s过期时间
+                activityDTO.setStatus(ActivityStatusEnum.RUNNING.getStatus());//更改活动状态为正在进行中
+                activityDTO.setStartDate(new Date());
+                activityDTO.setUpdateDate(new Date());
+                activityMapper.updateActivity(activityDTO);//更新activity表中的活动（本质来说更新了状态为正在进行中2）
+                //查询福袋表——更改对应的福袋状态——使用redis缓存中间状态: 已领取
+                List<LuckyBagDTO> luckyBagDTOList = luckyBagMapper.queryLuckyBag(activityDTO.getId());
+                //直接 lpush 到redis中, 可能value有点问题, 用这个优化一下
+                luckyBagDTOList.forEach(item ->{
+                    jedisUtil.lpush(RedisContant.BBS_CLOUD_ACTIVITY_LUCKY_BAG_LIST,JsonUtils.objectToJson(item));
+                });
+            }else {
+                logger.info("启动福袋活动---请勿重复操作, 请求参数:{}", JsonUtils.objectToJson(activityDTO));
+                return HttpResult.generateHttpResult(ActivityException.ACTIVITY_NOT_REPEAT_MANAGE);
+            }
+        }catch (Exception e){
+            logger.info("启动福袋活动, 发生异常, 请求参数param:{}", JsonUtils.objectToJson(activityDTO));
+            jedisUtil.del(RedisContant.BBS_CLOUD_ACTIVITY_LUCKY_BAG_LIST);//发生回滚，存在的话就会删除
+            e.printStackTrace();
+            throw e;
+        }finally {
+            redisLockHelper.releaseLock(key);//释放锁
+        }
+        return HttpResult.ok();
     }
-
+    /**
+     * 终止福袋活动
+     * handler到这里直接对具体的福袋活动进行操作——终止活动:1、修改activity表中活动状态为结束3；2、redis修改福袋活动表lucky_bag中状态
+     * ————》福袋活动结束后将福袋更新到福袋表中lucky_bag
+     * @param activityDTO
+     * @return
+     */
     @Override
-    public HttpResult endActivity(OperatorActivityParam param) {
-        return null;
+    @Transactional(rollbackFor = {Exception.class})
+    public HttpResult endActivity(ActivityDTO activityDTO) {
+        logger.info("终止福袋活动, 请求参数param:{}", JsonUtils.objectToJson(activityDTO));
+        //生成redis分布式锁的key：防止多个请求重复开启
+        String key = RedisContant.BBS_CLOUD_LOCK_ACTIVITY + activityDTO.getId();//各个活动不一样，添加活动的id
+
+        try {
+            //添加分布式锁——获取分布式锁
+            if(redisLockHelper.lock(key, CommonUtil.createUUID(), 3000L)){//3s过期时间
+                activityDTO.setStatus(ActivityStatusEnum.END.getStatus());//更改活动状态为结束状态
+                activityDTO.setEndDate(new Date());
+                activityDTO.setUpdateDate(new Date());
+                activityMapper.updateActivity(activityDTO);//更新activity表中的活动（本质来说更新了状态为结束3）
+                jedisUtil.del(RedisContant.BBS_CLOUD_ACTIVITY_LUCKY_BAG_LIST);//删除redis缓存中的关于福袋表状态的key
+                //活动结束, 更行福袋表lucky_bag: NORMAL正常待领取——》INVALID失效
+                luckyBagMapper.updateLuckyBag(activityDTO.getId(), LuckyBagStatusEnum.INVALID.getStatus(), LuckyBagStatusEnum.NORMAL.getStatus());
+
+            }else {
+                logger.info("终止福袋活动---请勿重复操作, 请求参数:{}", JsonUtils.objectToJson(activityDTO));
+                return HttpResult.generateHttpResult(ActivityException.ACTIVITY_NOT_REPEAT_MANAGE);
+            }
+        }catch (Exception e){
+            logger.info("终止福袋活动, 发生异常, 请求参数param:{}", JsonUtils.objectToJson(activityDTO));
+            e.printStackTrace();
+            throw e;
+        }finally {
+            redisLockHelper.releaseLock(key);//释放锁
+        }
+        return HttpResult.ok();
     }
 
     @Override

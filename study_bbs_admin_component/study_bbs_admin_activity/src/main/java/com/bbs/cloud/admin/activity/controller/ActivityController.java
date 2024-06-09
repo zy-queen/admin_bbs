@@ -26,17 +26,17 @@ public class ActivityController {
      * 活动类型共有四种：福袋活动、红包活动、积分兑换福袋活动、积分兑换金币活动
      * 涉及到用户对福袋/红包进行操作时，使用MQ解耦，即发送消息给服务组件，让服务组件监听消息，操作DB
      */
-    //发布活动：创建活动
+    //发布活动：创建活动——》初始化状态1
     @PostMapping("/create")
     public HttpResult createActivity(@RequestBody CreateActivityParam param){//接收请求参数
         return activityService.createActivity(param);
     }
-    //开启活动：
+    //开启活动——》正在进行中状态2
     @PostMapping("/start")
     public HttpResult startActivity(@RequestBody OperatorActivityParam param){
         return activityService.startActivity(param);
     }
-    //结束活动
+    //结束活动——》结束状态3
     @PostMapping("/end")
     public HttpResult endActivity(@RequestBody OperatorActivityParam param){
         return activityService.endActivity(param);
