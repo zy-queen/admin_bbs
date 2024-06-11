@@ -8,7 +8,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 /**
- * 这里的接口是由远程调用时实现的
+ * 这里的接口是由远程调用时实现的--->将对应服务组件的接口对外开放
  * 当远程端需要调用该实现类时，直接使用该接口调用相关方法接口实现远程调用
  * 对应服务组件的endpoint包下的ServiceEndPoint提供的接口，由活动组件通过本客户端即可远程调用
  */

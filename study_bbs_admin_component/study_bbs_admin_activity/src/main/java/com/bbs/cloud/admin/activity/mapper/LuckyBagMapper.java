@@ -7,7 +7,7 @@ import org.apache.ibatis.annotations.Param;
 import java.util.List;
 
 /**
- * 操作表lucky_bag
+ * 操作表lucky_bag------福袋活动\积分兑换附带活动都用这个
  */
 @Mapper
 public interface LuckyBagMapper {

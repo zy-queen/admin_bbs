@@ -3,6 +3,7 @@ package com.bbs.cloud.admin.service.controller;
 import ch.qos.logback.core.net.SyslogOutputStream;
 import com.bbs.cloud.admin.common.result.HttpResult;
 import com.bbs.cloud.admin.service.param.OrderMessageParam;
+import com.bbs.cloud.admin.service.result.ServiceInfoResult;
 import com.bbs.cloud.admin.service.service.ServiceService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
@@ -35,12 +36,15 @@ public class ServiceController {
 //        return "测试进入接口";
     }
 
-    /**
-     * 接⼝功能：查看服务信息
+    /** 可以学习返回数据的结构层次定义--开闭原则,低耦合,高内聚(代码可以增添而不用修改原有的代码,例如添加用户\文章\评论)
+     * 接⼝功能：查看服务信息ServiceInfoResult升级表示: Map的key: serviceXXXVO; value: 用json字符串表示    serviceType服务类型
+     *     礼物服务serviceGiftVO: serviceType(100)  礼物表清单giftList(service_gift表List类型)  10种礼物信息giftDescMap(Integer+Map<String, String>礼物枚举表示[不用GiftEnum])
+     *     金币服务serviceGoldVO: serviceType(101)  金币表service_gold(service_gold表类型)
+     *     服务类型serviceType: 100礼物服务  101充值服务(即充值金币)------Integer+String的Map表示
      * 接⼝路径：http:127.0.0.1:8091/service/query
      */
-    @GetMapping("/service/query")
-    public HttpResult queryService(){
-        return null;
+    @GetMapping("/query")
+    public HttpResult<ServiceInfoResult>  queryService(){
+        return serviceService.queryService();
     }
 }

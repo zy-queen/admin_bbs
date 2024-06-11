@@ -10,7 +10,15 @@ import java.util.HashMap;
 import java.util.List;
 
 public class ExcelUtil<T> {
-
+    /**
+     *
+     * @param response 响应
+     * @param fileName xlsx名
+     * @param sheetName 表名
+     * @param headers 表头
+     * @param propertys 属性名
+     * @param data 查询的数据库中表的数据
+     */
     public static void exportExcel(HttpServletResponse response,
                             String fileName,
                             String sheetName,

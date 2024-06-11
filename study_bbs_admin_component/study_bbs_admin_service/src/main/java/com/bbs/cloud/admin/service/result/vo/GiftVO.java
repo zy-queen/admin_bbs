@@ -1,4 +1,4 @@
-package com.bbs.cloud.admin.service.result;
+package com.bbs.cloud.admin.service.result.vo;
 
 import com.bbs.cloud.admin.common.enums.gift.GiftEnum;
 

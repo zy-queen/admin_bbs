@@ -41,7 +41,7 @@ public class ServiceContant {
     public static final String SERVICE_GOLD_NAME = "SERVICE_GOLD_NAME";
 
     /**
-     * 默认金币服务没有初始化，默认返回0
+     * 默认金币服务没有初始化，默认返回0, 这样友好一点
      */
     public static final Integer DEFAULT_SERVICE_INITIAL_GOLD = 0;
 

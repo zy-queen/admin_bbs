@@ -2,13 +2,22 @@ package com.bbs.cloud.admin.activity.controller;
 
 import com.bbs.cloud.admin.activity.param.CreateActivityParam;
 import com.bbs.cloud.admin.activity.param.OperatorActivityParam;
+import com.bbs.cloud.admin.activity.param.QueryActivityPageByConditionParam;
 import com.bbs.cloud.admin.activity.service.ActivityService;
 import com.bbs.cloud.admin.common.result.HttpResult;
+import com.bbs.cloud.admin.common.util.CommonUtil;
+import com.bbs.cloud.admin.common.util.ExcelUtil;
+import com.bbs.cloud.admin.result.vo.ActivityVO;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import javax.servlet.http.HttpServletResponse;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * ProjectName: com.bbs.cloud.admin.activity.controller
@@ -40,5 +49,36 @@ public class ActivityController {
     @PostMapping("/end")
     public HttpResult endActivity(@RequestBody OperatorActivityParam param){
         return activityService.endActivity(param);
+    }
+
+    /**
+     * 按照条件活动分页查询--主要是activity表
+     * @param param
+     * @return
+     */
+    @PostMapping("/page/condition/query")
+    public HttpResult queryActivityPageByCondition(@RequestBody QueryActivityPageByConditionParam param) {
+        return activityService.queryActivityPageByCondition(param);
+    }
+
+    /**
+     * 利用excel表工具类: 数据库中表 --> xlsx表
+     * 例: 导出activity表
+     * 从response流中-->将返回的二进制表的内容放到响应流中,在postman测试就将另存为xlsx表文件
+     */
+    @PostMapping("export")
+    public void exportActivityList(HttpServletResponse response){
+        String fileName = CommonUtil.createUUID();
+        String sheetName = "活动列表";
+        String[] headers = {"ID", "名称", "内容", "创建时间"};
+        String[] propertys = {"id", "name", "content", "createDate"};
+        List data = activityService.queryActivityList();
+        List<ActivityVO> activityVOS = new ArrayList<>();
+        data.forEach(item -> {
+            ActivityVO activityVO = new ActivityVO();
+            BeanUtils.copyProperties(item, activityVO);
+            activityVOS.add(activityVO);
+        });
+        ExcelUtil.exportExcel(response, fileName, sheetName, headers, propertys, activityVOS);
     }
 }

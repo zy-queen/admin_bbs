@@ -1,22 +1,30 @@
 package com.bbs.cloud.admin.activity.service;
 
 import com.bbs.cloud.admin.activity.contant.ActivityContant;
+import com.bbs.cloud.admin.activity.dto.ActivityConditionDTO;
 import com.bbs.cloud.admin.activity.dto.ActivityDTO;
+import com.bbs.cloud.admin.activity.dto.ActivityGoldDTO;
 import com.bbs.cloud.admin.activity.exception.ActivityException;
+import com.bbs.cloud.admin.activity.mapper.ActivityGoldMapper;
 import com.bbs.cloud.admin.activity.mapper.ActivityMapper;
 import com.bbs.cloud.admin.activity.mapper.LuckyBagMapper;
+import com.bbs.cloud.admin.activity.mapper.RedPacketMapper;
 import com.bbs.cloud.admin.activity.param.CreateActivityParam;
 import com.bbs.cloud.admin.activity.param.OperatorActivityParam;
-import com.bbs.cloud.admin.common.enums.activity.ActivityStatusEnum;
-import com.bbs.cloud.admin.common.enums.activity.ActivityTypeEnum;
-import com.bbs.cloud.admin.common.enums.activity.LuckyBagStatusEnum;
+import com.bbs.cloud.admin.activity.param.QueryActivityPageByConditionParam;
+import com.bbs.cloud.admin.common.enums.activity.*;
 import com.bbs.cloud.admin.common.result.HttpResult;
 import com.bbs.cloud.admin.common.util.JsonUtils;
-import org.apache.commons.lang3.StringUtils;
+import com.bbs.cloud.admin.result.ActivityPageResult;
+import com.bbs.cloud.admin.result.vo.ActivityVO;
+import org.apache.poi.ss.formula.functions.T;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.util.ObjectUtils;
+import org.springframework.util.StringUtils;
 
 import java.util.*;
 
@@ -38,6 +46,10 @@ public class ActivityService {
 
     @Autowired
     private LuckyBagMapper luckyBagMapper;//操作lucky_bag福袋活动表的mapper
+    @Autowired
+    private RedPacketMapper redPacketMapper;//操作表red_packet, 红包活动会用到的
+    @Autowired
+    private ActivityGoldMapper activityGoldMapper;//操作表activity_gold, 积分兑换金币会用到的
 
     /**
      * 创建活动
@@ -173,8 +185,116 @@ public class ActivityService {
                 .findFirst().get()
                 .endActivity(activityDTO);
     }
+
     /**
-     * 根据礼物类别去福袋活动表lucky_bag中查询已使用的礼物总数（礼物状态: 正常待领取、正在使用中的）
+     * 按照条件活动分页查询--主要是activity表
+     * @param param
+     * @return
+     */
+    public HttpResult queryActivityPageByCondition(QueryActivityPageByConditionParam param) {
+        logger.info("按照条件分页查询活动列表, param: {}", JsonUtils.objectToJson(param));
+
+        Integer pageNow = param.getPageNow();//当前页
+        if(ObjectUtils.isEmpty(pageNow)){
+            logger.info("按照条件分页查询活动列表, 当前页为空, param: {}", JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.PAGE_NOW_IS_NOT_NULL);
+        }
+        if(pageNow < ActivityContant.DEFAULT_MIN_PAGENOW){
+            logger.info("按照条件分页查询活动列表, 当前页小于1, param: {}", JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.PAGE_NOW_LESS_THAN_ZERO);
+        }
+
+        Integer pageSize = param.getPageSize();//页大小
+        if(ObjectUtils.isEmpty(pageSize)){
+            logger.info("按照条件分页查询活动列表, 当前页数据量为空, param: {}", JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.PAGE_SIZE_IS_NOT_NULL);
+        }
+        if(pageSize < ActivityContant.DEFAULT_MIN_PAGESIZE){
+            logger.info("按照条件分页查询活动列表, 当前数据量小于1, param: {}", JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.PAGE_SIZE_LESS_THAN_ZERO);
+        }
+
+        Integer type = param.getType();
+        if(ObjectUtils.isEmpty(type)){
+            logger.info("按照条件分页查询活动列表, 活动类型不能为空, param: {}", JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.ACTIVITY_TYPE_IS_NOT_NULL);
+        }
+        if(ActivityTypeEnum.getActivityQueryUsedMap().getOrDefault(type, null) == null){
+            logger.info("按照条件分页查询活动列表, 活动类型不正确, param: {}", JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.ACTIVITY_TYPE_IS_NOT_EXIST);
+        }
+
+        Integer status = param.getStatus();
+        if(ObjectUtils.isEmpty(status)){
+            logger.info("按照条件分页查询活动列表, 活动状态不能为空, param: {}", JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.ACTIVITY_STATUS_IS_NOT_NULL);
+        }
+        if(ActivityStatusEnum.getActivityStatusQueryMap().getOrDefault(status, null) == null){
+            logger.info("按照条件分页查询活动列表, 活动状态不正确, param: {}", JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.ACTIVITY_STATUS_NOT_TRUE);
+        }
+
+        //活动类型: 可能是所有类型
+        List<Integer> typeList = new ArrayList<>();
+        if(type.equals(ActivityTypeEnum.ALL.getType())){
+            typeList.add(ActivityTypeEnum.LUCKY_BAG.getType());
+            typeList.add(ActivityTypeEnum.RED_PACKET.getType());
+            typeList.add(ActivityTypeEnum.SCORE_EXCHANGE_LUCKY_BAG.getType());
+            typeList.add(ActivityTypeEnum.SCORE_EXCHANGE_GOLD.getType());
+        }else{
+            typeList.add(type);
+        }
+
+        //活动状态: 可能是所有状态
+        List<Integer> statusList = new ArrayList<>();
+        if(status.equals(ActivityStatusEnum.ALL.getStatus())){
+            statusList.add(ActivityStatusEnum.INITIAL.getStatus());
+            statusList.add(ActivityStatusEnum.RUNNING.getStatus());
+            statusList.add(ActivityStatusEnum.END.getStatus());
+        }else{
+            statusList.add(status);
+        }
+
+        Integer start = (pageNow - 1) * pageSize;
+        Integer limit = pageSize;
+
+        ActivityConditionDTO activityConditionDTO = new ActivityConditionDTO();
+        activityConditionDTO.setTypeList(typeList);
+        activityConditionDTO.setStatusList(statusList);
+        activityConditionDTO.setStart(start);
+        activityConditionDTO.setLimit(limit);
+        Integer total = activityMapper.queryActivityCountByCondition(activityConditionDTO);
+        if(ObjectUtils.isEmpty(total)){
+            logger.info("按照条件分页查询活动列表, 当前条件没有查询到数据, param: {}", JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.ACTIVITY_DATA_IS_NULL);//当前没有数据
+        }
+        Integer pageTotal = total / pageSize + 1;
+        if(pageNow > pageTotal){
+            logger.info("按照条件分页查询活动列表, 当前页大于总页数, param: {}", JsonUtils.objectToJson(param));
+            return HttpResult.generateHttpResult(ActivityException.PAGE_NOW_GREATER_TOTAL_PAGE);
+        }
+
+        //开始查询数据
+        List<ActivityDTO> activityDTOS = activityMapper.queryActivityByCondition(activityConditionDTO);
+
+        List<ActivityVO> activityVOS = new ArrayList<>();
+        activityDTOS.forEach(item -> {
+            ActivityVO activityVO = new ActivityVO();
+            BeanUtils.copyProperties(item, activityVO);
+            activityVOS.add(activityVO);
+        });
+        //开始封装返回结果
+        ActivityPageResult result = new ActivityPageResult();
+        result.setStatueMap(ActivityStatusEnum.getActivityStatusMap());
+        result.setTypeMap(ActivityTypeEnum.getActivityTypeMap());
+        result.setData(activityVOS);
+
+        return new HttpResult(result);
+
+    }
+
+    /**
+     * 根据礼物类别去福袋活动表lucky_bag中查询已使用的礼物总数（礼物状态: normal \ geted 的礼物总数-涉及的总行数count(*)）
      * @return
      */
     public HttpResult<Integer> queryUsedGiftAmountByType(Integer giftType) {
@@ -192,4 +312,54 @@ public class ActivityService {
         logger.info("远程调用------end-----获取待领取和已经被领取的礼物数量, giftType: {}, amount: {}", giftType, amount);
         return new HttpResult(amount);
     }
+
+    /**
+     * 查询红包表red_packet\积分兑换金币表activity_gold中已使用的金币情况
+     * red_packet表中状态为normal \ geted的quota总额; activity_gold表中状态为del的used_quota已使用额度 \ 状态为normal的quota总额
+     * @return
+     */
+    public HttpResult<Integer> queryUsedGold() {
+
+        logger.info("远程调用------start-----获取待领取和已经被领取的红包金币的总额");
+        Integer total = 0;
+        //第一步: 查询red_packet表已使用的金币情况: 状态为normal \ geted的quota总额
+        Integer normalRedPacketGoldTotal = redPacketMapper.queryActivityRedPacket(RedPacketStatusEnum.NORMAL.getStatus());
+        if(normalRedPacketGoldTotal == null){
+            normalRedPacketGoldTotal = 0;
+        }
+        logger.info("远程调用-----获取待领取的红包金币的总额, normalRedPacketGoldTotal: {}", normalRedPacketGoldTotal);
+        total = total + normalRedPacketGoldTotal;
+
+        Integer getedRedPacketGoldTotal = redPacketMapper.queryActivityRedPacket(RedPacketStatusEnum.GETED.getStatus());
+        if(getedRedPacketGoldTotal == null){
+            getedRedPacketGoldTotal = 0;
+        }
+        logger.info("远程调用-----获取被领取的红包金币的总额, getedRedPacketGoldTotal: {}", getedRedPacketGoldTotal);
+        total = total + getedRedPacketGoldTotal;
+
+        //第二步: 查询activity_gold表已使用的金币情况: 状态为del的used_quota已使用额度 \ 状态为normal的quota总额
+        Integer endActivityUsedGold = activityGoldMapper.queryUsedAmountTotalByStatus(ActivityGoldStatusEnum.DEL.getStatus());//根据状态获取已使用金币额度
+        if(endActivityUsedGold == null){
+            endActivityUsedGold = 0;
+        }
+        logger.info("远程调用-----获取被终止的活动使用了多少金币, endActivityUsedGold: {}", endActivityUsedGold);
+        total = total + endActivityUsedGold;
+
+
+        ActivityGoldDTO activityGoldDTO = activityGoldMapper.queryActivityGoldDTOByStatus(ActivityGoldStatusEnum.NORMAL.getStatus());
+        logger.info("远程调用-----获取初始化或者运行中的活动使用了多少金币, activityGoldDTO: {}", activityGoldDTO);
+        if(activityGoldDTO != null){
+            total = total + activityGoldDTO.getQuota();
+        }
+        return new HttpResult<>(total);
+    }
+
+    /**
+     * 查询activity表的所有信息
+     * @return
+     */
+    public List<ActivityDTO> queryActivityList() {
+        return activityMapper.queryActivityList();//查询activity表的所有信息
+    }
 }
+

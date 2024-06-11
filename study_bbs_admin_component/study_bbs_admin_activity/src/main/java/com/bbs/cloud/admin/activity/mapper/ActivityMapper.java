@@ -1,5 +1,6 @@
 package com.bbs.cloud.admin.activity.mapper;
 
+import com.bbs.cloud.admin.activity.dto.ActivityConditionDTO;
 import com.bbs.cloud.admin.activity.dto.ActivityDTO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -21,9 +22,9 @@ public interface ActivityMapper{
 
     void updateActivity(ActivityDTO activityDTO);
 
-//    List<ActivityDTO> queryActivityList();
+    List<ActivityDTO> queryActivityList();
 
-//    Integer queryActivityCountByCondition(ActivityConditionDTO conditionDTO);
-//
-//    List<ActivityDTO> queryActivityByCondition(ActivityConditionDTO conditionDTO);
+    Integer queryActivityCountByCondition(ActivityConditionDTO conditionDTO);
+
+    List<ActivityDTO> queryActivityByCondition(ActivityConditionDTO conditionDTO);
 }

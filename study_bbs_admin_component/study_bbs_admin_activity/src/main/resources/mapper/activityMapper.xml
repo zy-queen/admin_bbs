@@ -56,11 +56,12 @@
         end_date=#{endDate}
         where id=#{id}
     </update>
-<!-- 分页暂时先注释
+
     <select id="queryActivityList" resultMap="base_result">
         select * from activity
     </select>
 
+    <!-- 分页相关  -->
     <select id="queryActivityCountByCondition" resultType="java.lang.Integer">
         select count(*) from activity
         where 1 = 1
@@ -78,6 +79,7 @@
         </if>
     </select>
 
+    <!-- where 1 = 1 初始条件 -->
     <select id="queryActivityByCondition" resultMap="base_result">
         select * from activity
         where 1 = 1
@@ -96,5 +98,5 @@
         order by create_date desc
         limit #{start}, #{limit}
     </select>
- -->
+
 </mapper>

@@ -36,6 +36,9 @@ public class ActivityContant {
      * 活动ID长度
      */
     public static final Integer ACTIVITY_ID_LENGTH = 32;
+    /**
+     * 活动分页查询
+     */
 
     public static final Integer DEFAULT_MIN_PAGENOW = 1;
 
