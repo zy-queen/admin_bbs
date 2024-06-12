@@ -15,7 +15,8 @@
     <packaging>pom</packaging>
     <modules>
         <module>study_bbs_admin_test</module>
-        <module>study_bbs_cloud_admin_activity</module>
+        <module>study_bbs_admin_service</module>
+        <module>study_bbs_admin_activity</module>
     </modules>
 
     <dependencies>

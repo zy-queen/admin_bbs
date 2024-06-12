@@ -9,7 +9,7 @@ import java.util.Map;
 public enum ActivityTypeEnum {
 
     //分页查询时使用
-    ALL(0, "ALL", "所有活动"),
+    ALL(0, "ALL", "所有活动"), //分页的时候会用到的筛选条件
 
     LUCKY_BAG(1, "LUCKY_BAG", "福袋活动"),
 
