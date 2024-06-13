@@ -214,10 +214,13 @@ public class ScoreExchangeGoldActivityManage implements ActivityManage {
                 Integer unusedGold = jedisUtil.get(RedisContant.BBS_CLOUD_ACTIVITY_SCORE_GOLD, Integer.class);
                 jedisUtil.del(RedisContant.BBS_CLOUD_ACTIVITY_SCORE_GOLD);//删除redis缓存中的关于积分兑换金币表activity_gold的key
                 //积分兑换金币活动表activity_gold的处理: 金币情况\关联的活动状态
+
                 activityGoldDTO.setUnusedQuota(unusedGold);
+                activityGoldDTO.setUsedQuota(activityGoldDTO.getQuota() - activityGoldDTO.getUnusedQuota());
                 activityGoldDTO.setStatus(ActivityGoldStatusEnum.DEL.getStatus());
                 //活动结束, 更新积分兑换金币表activity_gold: 金币使用情况 \ 金币状态
                 activityGoldMapper.updateActivityGoldDTO(activityGoldDTO);
+
 
             }else {
                 logger.info("终止积分兑换活动---请勿重复操作, 请求参数:{}", JsonUtils.objectToJson(activityDTO));
