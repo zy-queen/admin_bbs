@@ -53,7 +53,6 @@ public class MessageReceiver {
         }
         Integer serviceType = orderMessageDTO.getServiceType();
         /**
-         * TODO 消息处理未完成
          * 要与活动组件交互，获取被领取和在使用的金币/礼物，为了统计金币/礼物后，最后更新到库存中
          * 过滤器：筛选出相关服务的订单
          */
